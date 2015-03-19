@@ -1,0 +1,63 @@
+---
+title: "Machine Learning Project"
+author: "Iain Argent"
+date: "Tuesday, March 10, 2015"
+output: html_document
+---
+
+Set up the "caret" package and download the training data.
+```{r, cache=TRUE}
+if(!require(caret)) install.packages("caret")
+library(caret)
+train <- read.csv("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", stringsAsFactors=F)
+```
+
+Get the classes of all the columns from the training set and use them to read in the test set. Note that if you don't set the columns, the same columns' classes risk being interpreted differently in each data frame.
+
+Make the first column "NA" so that it will be read as an integer, despite being a string. You can read a discussion about R's interpretation of quoted numbers [here](http://r.789695.n4.nabble.com/read-table-with-quoted-integers-td4677249.html).
+```{r}
+colClasses<-as.vector(sapply(train, class))
+colClasses[[1]]<-NA
+test<-read.csv("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", stringsAsFactors=F, colClasses=colClasses)
+```
+
+Looking at the data, there seem to be a lot of NAs and blank columns. Let's count the NAs and compare with the number of rows in the training set. I'm also going to count how often values are duplicated by table()ing the frequencies and taking the maximum.
+```{r}
+checkNAs<-apply(train, 2, function(x) sum(is.na(x)))
+checkdups<-apply(train, 2, function(x) max(table(x)))
+checkNAs
+checkdups
+nrow(train)
+```
+
+Columns have either 19216 NAs or duplicate fields (which is nearly all), or no NAs! At this point I decided to keep only the ones that have zero NAs and have fewer than 10 000 duplicates.
+
+```{r}
+goodcols=names(which((checkNAs==0) & (checkdups<10000)))
+```
+
+I also remove "X" (the observation number), "username" (because I don't want my model to be influenced by whose data it is) and the predictor, "clase". These are positions 1,2 and 59 in the vector "goodcols".
+
+```{r}
+predstr<-paste(goodcols[-c(1,2,59)], sep="", collapse=" + ")
+form<-as.formula(paste("as.factor(classe) ~", predstr))
+```
+
+Train the model using the Random Forests algorithm. Note that caret automatically does cross-validation for you.
+```{r, cache=TRUE}
+set.seed(1984)
+fit<-train(form, method="rf", data=train)
+```
+
+Apply the model to the test set of data and see what the answers are.
+```{r}
+answers=predict(fit, newdata=test)
+answers
+```
+
+Bootstrap resampling was used for cross validation. This is done automatically by train() - see below.
+
+Error estimation from cross-validation is 0.01% (accuracy is 0.999).
+```{r}
+fit$results
+```
